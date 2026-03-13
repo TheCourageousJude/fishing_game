@@ -1,0 +1,1159 @@
+// ============================================================
+// Junior's Fishing Adventure — TypeScript / HTML Canvas Port
+// Ported from the original Java Swing prototype.
+// ============================================================
+
+// ── Constants ────────────────────────────────────────────────
+const WIN_W            = 900;
+const WIN_H            = 700;
+const TIMER_MS         = 10;
+const UP_ACCEL         = 0.3;
+const GRAVITY_V        = 0.3;
+const MAX_BAR_SPEED    = 20;
+const PROGRESS_FILL    = 1.0;
+const PROGRESS_DECAY   = -2.0;
+const SEARCH_CHECK_MS  = 1000;
+const BITE_WINDOW_MS   = 2000;
+const BG_TILE          = 25;
+const MAX_STAGES       = 5;
+const STAGE_TARGET     = 500;
+const BAR_H            = 500;
+const BAR_W            = 40;
+const BAR_X            = 720;
+const BAR_Y            = 80;
+const PROG_X           = 675;
+const FISH_H_PX        = 30;
+
+const STAGE_DIFFICULTY : [number,number][]  = [[1,20],[10,30],[18,45],[28,55],[48,93]];
+const STAGE_BASE_VALUES: [number,number][]  = [[150,250],[300,500],[450,750],[600,1000],[750,1250]];
+const FISH_BONUS       : number[]           = [1.0, 1.2, 1.2, 1.5];
+const CAPTAIN_FEES     : number[]           = [500, 1000, 1500, 2500, 5000];
+
+function rgb(r: number, g: number, b: number): string {
+  return `rgb(${r},${g},${b})`;
+}
+
+// ── Pixel Art Data ───────────────────────────────────────────
+const VICTORY_PAL: string[] = [
+  rgb(255,238,0),rgb(20,110,160),rgb(30,140,200),rgb(85,170,229),
+  rgb(180,180,180),rgb(150,230,60),rgb(70,150,0),rgb(230,0,0),
+  rgb(180,0,0),rgb(230,210,150),rgb(190,240,240),rgb(0,0,0),
+  rgb(120,120,120),rgb(200,200,200),rgb(230,235,225),rgb(0,120,40),
+  rgb(160,160,160),
+];
+const VICTORY_BG: number[][] = [
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+  [1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,4,4,4,4],
+  [1,1,1,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,4,4,1],
+  [1,1,4,4,4,1,1,1,1,1,1,1,1,4,4,4,4,4,4,1,1,1,1,1,1,1,1,1],
+  [2,4,4,4,4,4,2,2,2,2,2,2,2,2,4,2,4,2,2,2,2,14,14,14,14,14,2,2],
+  [2,2,4,4,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,14,14,11,14,11,14,14,2],
+  [2,2,2,2,2,8,8,8,8,8,8,8,8,2,2,2,2,2,2,2,14,14,14,14,14,14,14,2],
+  [2,2,2,2,8,8,7,7,7,7,7,8,8,8,2,2,2,2,2,2,14,11,14,14,14,11,14,2],
+  [2,2,2,8,8,7,7,7,7,7,8,8,7,8,8,2,2,2,2,2,14,14,11,11,11,14,14,2],
+  [2,2,8,8,7,7,7,7,7,8,8,7,7,7,8,8,2,2,2,2,2,14,14,14,14,14,2,2],
+  [3,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,3,3,11,11,3,14,3,3,3,3,3],
+  [3,3,3,6,6,6,6,6,6,6,6,6,6,6,6,3,3,3,11,11,11,11,3,3,3,3,3,3],
+  [3,3,3,6,10,11,10,5,10,11,10,6,5,5,6,3,3,3,11,11,11,11,13,13,13,13,3,3],
+  [3,3,3,6,11,11,11,5,11,11,11,6,9,9,6,3,11,3,3,11,11,13,10,11,10,13,10,3],
+  [3,3,3,6,10,11,10,5,10,11,10,6,9,9,6,3,11,3,11,11,11,11,13,11,13,13,13,13],
+  [3,3,3,6,5,5,5,5,5,5,5,6,9,9,6,3,3,11,11,11,11,11,11,13,13,13,13,13],
+  [3,3,3,6,5,5,5,5,5,5,5,6,9,9,6,3,3,3,11,11,11,11,3,12,3,3,12,3],
+  [16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,16,11,16,16,11,16,16,16,16,16,16],
+  [15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15,15],
+];
+
+const MARKET_PAL: string[] = [
+  rgb(210,170,120),rgb(245,167,58),rgb(0,0,0),rgb(144,84,0),
+  rgb(124,77,0),rgb(255,255,255),rgb(200,129,12),rgb(152,94,0),
+  rgb(240,97,0),rgb(139,118,7),rgb(204,245,247),rgb(0,76,199),
+  rgb(255,238,0),rgb(211,211,211),rgb(64,64,64),
+];
+const MARKET_BG: number[][] = [
+  [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,6,3,3,3,3,3,3,3,3,3,3,3,3,6,0,0],
+  [0,0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,0,0,0,0,6,3,3,3,3,3,3,3,3,3,3,3,3,6,0,0],
+  [0,0,2,5,5,5,5,5,5,5,5,5,5,5,5,5,2,0,0,0,6,3,3,3,3,3,3,3,3,3,3,3,3,6,0,0],
+  [0,0,2,5,5,5,5,5,5,5,5,5,5,5,5,5,2,0,0,0,6,3,3,3,3,3,3,3,3,3,3,3,3,6,0,0],
+  [0,0,2,5,5,5,5,5,5,5,5,5,5,5,5,5,2,0,0,0,6,3,3,3,3,3,3,3,3,3,3,3,3,6,0,0],
+  [0,0,2,5,5,5,5,5,5,5,5,5,5,5,5,5,2,0,0,0,6,3,3,3,3,3,3,3,3,3,3,3,3,6,0,0],
+  [0,0,2,5,5,5,5,5,5,5,5,5,5,5,5,5,2,0,0,0,6,3,3,3,3,3,3,3,3,3,3,3,3,6,0,0],
+  [0,0,0,2,2,2,2,2,2,2,2,2,2,2,5,2,0,0,0,0,6,3,3,3,3,3,3,3,3,3,3,3,3,6,0,0],
+  [0,0,0,0,2,9,9,9,9,9,9,9,2,2,5,2,0,0,0,0,6,6,6,6,6,6,6,6,6,6,6,6,6,6,0,0],
+  [0,0,0,2,2,9,9,9,9,9,9,2,2,0,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0,0],
+  [0,0,2,9,9,2,2,2,2,2,2,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0],
+  [0,0,0,2,2,4,4,4,4,4,4,4,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,4,0,0],
+  [0,0,0,0,2,2,2,4,4,2,2,4,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12,2,0,0,0,0,4,0],
+  [0,0,0,0,2,4,2,4,4,4,2,4,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,12,12,6,2,0,0,0,0],
+  [0,0,0,0,2,4,4,4,4,4,4,4,2,0,0,0,0,0,0,0,0,0,0,0,0,0,10,2,12,12,6,6,6,0,0,0],
+  [0,0,0,0,2,2,2,2,2,2,2,4,2,0,0,0,0,0,0,0,0,0,0,0,0,0,10,10,10,10,6,13,2,13,0,0],
+  [0,0,0,0,2,4,4,4,4,4,4,4,2,0,2,2,2,2,2,0,0,0,0,0,0,0,4,10,10,10,13,13,13,4,0,0],
+  [0,0,0,2,2,2,2,4,4,2,2,2,2,2,11,2,4,4,2,0,0,0,0,0,0,0,4,4,4,4,4,4,4,4,0,0],
+  [0,0,2,11,11,2,10,2,2,10,2,11,11,11,11,2,2,2,0,0,0,0,0,0,0,0,4,7,7,7,7,7,7,4,0,0],
+  [7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,4,14,14,14,14,14,14,4,7,7],
+  [1,1,7,1,1,1,7,1,1,1,1,7,1,1,1,7,1,1,1,1,7,1,1,1,7,1,4,13,13,13,13,13,13,4,1,1],
+  [1,1,7,1,7,1,7,1,1,1,1,7,1,7,1,7,1,1,1,1,7,1,7,1,7,1,4,7,7,7,7,7,7,4,1,1],
+  [1,1,7,1,7,1,7,1,1,1,1,7,1,7,1,7,1,1,1,1,7,1,7,1,7,1,4,7,7,7,7,7,7,4,1,1],
+  [1,1,7,1,7,1,7,1,1,1,1,7,1,7,1,7,1,1,1,1,7,1,7,1,7,1,4,14,14,14,14,14,14,4,1,1],
+  [1,1,7,1,7,1,7,1,1,1,1,7,1,7,1,7,1,1,1,1,7,1,7,1,7,1,4,13,13,13,13,13,13,4,1,1],
+  [1,1,7,1,7,1,7,1,1,1,1,7,1,7,1,7,1,1,1,1,7,1,7,1,7,1,4,7,7,7,7,7,7,4,1,1],
+];
+
+const MENU_PAL: string[] = [
+  rgb(0,0,0),rgb(139,69,19),rgb(255,165,0),rgb(0,0,139),
+  rgb(0,100,0),rgb(255,224,189),rgb(255,255,255),rgb(0,140,255),
+  rgb(0,70,255),rgb(0,30,255),rgb(101,67,33),rgb(34,139,34),
+  rgb(0,85,0),rgb(139,0,0),
+];
+const MENU_BG: number[][] = [
+  [4,11,11,4,4,4,11,11,11,4,4,11,11,4,4,4,4,11,11,11,4,4,11],
+  [11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11],
+  [11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11,11],
+  [11,11,11,11,11,11,4,4,11,11,11,11,11,11,11,11,11,4,4,4,11,11,11],
+  [4,4,11,11,4,4,3,12,4,4,4,11,4,4,11,4,4,12,12,10,4,4,4],
+  [12,12,4,4,12,3,3,3,12,10,10,4,12,12,4,10,1,12,12,10,10,12,12],
+  [12,12,10,10,12,3,5,5,12,10,10,12,12,12,1,1,6,12,12,10,10,12,12],
+  [12,12,10,10,12,5,5,5,12,10,10,12,1,1,10,10,6,12,12,10,10,12,12],
+  [12,12,10,10,12,3,13,13,12,10,10,1,12,12,10,10,6,12,12,10,10,12,12],
+  [12,12,10,10,12,3,13,13,13,13,5,12,12,12,10,6,12,12,12,10,10,12,12],
+  [12,12,10,10,12,12,3,3,3,3,10,12,12,12,10,6,12,12,12,10,10,12,12],
+  [1,1,1,1,1,1,3,13,13,10,10,12,12,12,10,6,12,12,12,10,10,12,12],
+  [2,1,2,2,1,2,3,13,13,13,10,12,12,12,10,6,12,12,12,10,10,12,12],
+  [2,2,1,2,2,1,2,3,3,13,7,7,7,7,9,9,9,7,7,7,7,7,7],
+  [1,1,1,1,1,1,1,1,1,3,7,7,7,7,7,7,7,7,7,7,7,7,7],
+  [8,1,8,8,8,1,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8],
+  [9,1,9,9,9,1,8,8,9,9,9,9,8,8,8,9,9,8,9,9,9,8,8],
+];
+
+const STAGE_PALS: string[][] = [
+  [rgb(135,206,250),rgb(220,220,220),rgb(60,170,60),rgb(120,200,120),
+   rgb(139,69,19),rgb(90,55,30),rgb(90,90,90),rgb(110,110,110),rgb(0,200,220)],
+  [rgb(180,230,255),rgb(150,210,240),rgb(60,130,115),rgb(40,110,95),
+   rgb(25,75,65),rgb(110,85,0),rgb(85,65,0),rgb(50,120,60),rgb(35,95,45),
+   rgb(200,200,200),rgb(120,120,120)],
+  [rgb(95,183,0),rgb(70,145,0),rgb(182,131,0),rgb(115,83,0),
+   rgb(30,224,185),rgb(16,149,117)],
+  [rgb(253,254,254),rgb(157,254,247),rgb(221,192,147),rgb(211,163,89),
+   rgb(178,108,0),rgb(43,124,0),rgb(108,227,1),rgb(100,148,21),
+   rgb(0,208,129),rgb(216,178,118)],
+  [rgb(220,220,220),rgb(128,178,214),rgb(84,91,97),rgb(18,94,151),
+   rgb(25,131,203),rgb(28,141,220),rgb(229,172,0),rgb(150,86,0),rgb(0,0,0)],
+];
+const STAGE_BGS: number[][][] = [
+  [[0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],[0,0,1,1,1,1,1,0,0,0,0,1,1,0,0,0,0,0,1,1,1,0,0,0,1,1],[0,0,0,1,1,1,1,0,0,1,1,1,1,1,1,0,0,1,1,1,1,1,1,0,0,0],[0,0,0,0,1,1,0,0,0,0,1,1,1,0,0,0,0,0,0,0,1,0,0,0,0,2],[0,0,0,0,0,0,2,0,0,0,0,0,0,0,0,0,0,0,2,0,0,0,2,0,2,3],[2,0,0,2,0,2,2,0,0,0,0,0,2,0,0,0,0,2,3,2,0,2,3,2,3,3],[3,2,2,3,2,3,3,2,0,2,0,2,3,2,0,0,2,3,3,3,2,3,3,3,2,3],[3,2,3,3,3,2,3,3,2,3,2,3,3,3,2,2,3,3,3,3,3,2,3,2,3,3],[3,3,2,3,2,3,3,2,3,3,3,2,3,3,2,3,2,3,3,3,2,3,3,3,2,3],[3,2,3,3,3,2,3,2,3,3,3,2,3,3,2,3,3,2,3,2,3,3,3,3,3,2],[2,2,2,2,2,2,2,3,3,3,3,3,2,2,3,3,3,3,2,3,3,3,3,3,3,3],[5,0,4,4,5,5,2,2,2,2,2,2,2,3,3,2,3,3,2,2,2,2,2,2,2,2],[5,4,4,4,5,5,0,0,4,4,5,5,0,2,2,2,2,2,2,5,5,4,4,0,5,5],[6,6,6,4,4,5,0,0,4,4,4,5,0,0,0,4,4,0,0,5,5,4,4,4,5,5],[7,7,7,6,6,5,0,4,4,4,4,5,0,0,4,4,4,4,5,5,5,4,4,4,5,5],[7,7,7,7,7,6,0,4,6,6,4,4,5,0,4,4,4,4,5,5,4,4,4,6,6,5],[7,7,7,7,7,7,6,6,7,7,6,4,6,6,6,4,4,4,6,6,6,4,6,7,7,6],[6,6,6,6,7,6,7,7,7,7,7,6,7,7,7,6,4,6,7,7,7,6,7,7,7,7],[8,8,8,8,6,7,7,7,7,7,7,7,6,7,7,7,6,7,7,7,7,7,7,7,6,6],[8,8,8,8,8,6,6,7,6,6,6,6,7,7,7,6,6,6,7,7,7,7,6,6,8,8],[8,8,8,8,6,8,8,6,8,8,8,8,6,6,6,8,8,8,6,6,6,6,8,8,8,8],[8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,6,6,7,7,6,8,8,8,8,8],[8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,6,7,7,7,7,7,6,8,8,8,8],[6,8,8,8,6,6,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8],[7,6,6,6,7,7,6,6,6,6,8,8,8,8,8,6,6,6,8,8,8,8,8,6,6,8],[6,7,7,7,7,6,7,7,7,7,6,8,6,6,6,7,7,7,6,8,8,6,6,7,7,6],[7,7,7,7,6,7,7,7,7,7,7,6,7,7,7,7,7,7,7,6,6,7,7,7,7,7]],
+  [[1,1,0,0,0,0,1,1,1,1,1,0,1,1,1,8,8,8,8,8,8,8,8,8,1,1],[1,1,1,0,0,1,1,1,1,0,0,0,1,8,8,8,8,8,8,8,8,8,8,8,8,0],[0,1,1,1,1,1,1,1,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,0],[0,1,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,8,5,8,8,8,8,1],[1,8,8,8,8,8,8,8,8,8,8,8,8,8,5,5,8,8,8,5,5,8,8,8,8,8],[8,8,8,8,8,8,8,8,8,8,8,8,8,5,5,5,5,8,8,5,8,8,5,5,8,8],[8,8,8,5,8,8,5,8,8,8,8,8,8,8,8,5,5,8,8,5,8,8,5,5,8,8],[8,8,8,5,8,8,5,8,8,8,5,8,5,8,8,8,5,5,5,5,5,5,5,8,8,8],[5,5,5,5,5,5,5,8,8,8,5,5,5,5,8,8,5,5,5,5,5,5,5,8,8,8],[8,8,5,5,5,5,8,8,8,8,8,5,5,5,5,8,8,5,5,5,5,5,8,8,8,8],[8,8,8,8,5,5,8,6,8,8,8,5,5,0,8,8,6,8,5,5,5,5,8,6,8,8],[8,6,8,8,5,5,8,6,8,8,0,5,5,0,0,0,6,8,5,5,5,5,8,6,8,8],[0,6,0,5,5,5,0,6,6,0,0,5,5,5,0,6,6,0,5,5,5,5,0,6,6,0],[6,6,0,5,5,5,0,6,6,0,0,5,5,5,6,6,6,0,0,5,5,5,0,6,6,0],[6,6,0,5,5,5,5,0,6,0,5,5,5,5,6,0,6,6,0,5,5,5,0,6,6,6],[3,3,5,5,5,5,5,3,3,5,5,3,5,3,5,4,4,4,4,5,5,5,6,6,3,6],[4,4,5,5,5,5,5,3,3,3,3,3,3,3,3,3,4,4,4,5,5,5,3,3,3,3],[7,4,5,5,5,5,5,4,4,4,3,3,3,3,3,3,7,3,3,5,5,5,3,3,7,4],[3,3,5,5,5,5,5,5,4,4,4,4,7,4,4,3,3,3,3,5,5,5,4,4,4,4],[3,5,5,4,5,5,3,5,5,4,4,4,4,4,4,4,4,3,3,5,5,5,5,4,4,3],[4,5,5,3,5,5,3,5,5,3,4,4,4,4,4,4,4,4,5,5,5,5,5,3,3,3],[4,5,5,3,5,5,3,5,4,4,7,3,3,3,3,4,4,5,5,5,5,5,5,5,3,3],[3,3,3,3,5,5,4,4,4,4,4,3,3,7,3,3,5,5,5,5,5,5,5,5,5,3],[3,4,4,4,4,4,4,4,4,3,3,3,3,3,3,3,5,5,3,5,5,5,3,5,5,5],[4,4,4,4,7,4,4,3,3,3,3,3,3,3,3,5,5,5,3,5,5,5,3,3,5,5],[4,7,4,4,3,3,3,7,3,3,4,4,4,3,3,5,5,5,4,5,5,5,5,3,5,5],[3,3,3,3,3,3,3,3,3,4,4,7,4,4,4,5,5,3,4,4,5,5,5,4,4,4]],
+  [[0,0,0,0,0,1,1,0,1,1,1,1,1,1,0,0,0,0,0,0,0,1,1,1,1,1],[0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,0,0],[0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,1,1,3,0,0,0],[0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,3,3,2,0],[0,0,0,0,0,0,1,1,0,1,1,1,1,1,3,1,1,0,0,0,1,3,3,3,2,2],[0,0,0,0,1,1,1,1,1,1,1,1,2,1,3,1,0,0,2,0,0,3,3,3,2,2],[0,0,0,1,1,1,0,0,1,1,1,1,2,1,3,3,0,0,2,2,0,3,3,3,3,2],[0,1,1,1,1,0,0,0,0,1,1,2,2,1,3,3,1,0,2,2,0,3,3,3,3,2],[1,1,1,0,0,0,2,0,0,0,1,2,2,2,3,3,0,2,2,2,0,3,3,3,3,2],[1,1,1,0,0,0,2,2,0,0,0,2,2,2,3,3,0,2,2,2,1,3,3,3,3,2],[1,1,1,1,0,0,2,2,0,0,0,2,2,2,3,3,3,2,2,2,3,3,3,3,3,3],[1,2,2,1,0,2,2,2,0,0,1,2,2,2,3,3,3,2,2,2,3,3,3,3,3,3],[0,2,2,0,0,2,2,2,1,1,1,2,2,3,3,3,3,2,2,2,3,3,3,3,3,3],[0,2,2,3,1,2,2,2,2,1,2,2,2,3,3,3,3,2,2,3,3,3,3,3,3,3],[2,2,3,3,1,2,2,2,2,1,2,2,2,3,3,3,3,3,2,3,5,5,5,5,5,5],[2,2,3,3,3,2,2,3,3,3,2,2,3,3,5,5,5,5,5,5,5,5,5,5,5,5],[2,2,3,3,3,2,3,3,3,3,3,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],[2,2,3,3,3,2,3,3,3,3,3,3,3,5,5,5,5,4,4,4,4,4,4,4,4,4],[2,3,3,3,5,5,5,5,3,3,3,3,3,3,3,4,4,4,3,3,5,4,4,4,4,4],[5,5,5,5,5,5,5,5,5,5,5,3,3,3,3,3,4,3,3,5,5,4,4,4,4,4],[5,5,5,5,5,4,4,4,4,5,5,5,5,3,3,3,3,3,5,5,4,4,4,4,4,4],[4,4,4,4,4,4,4,4,4,4,5,5,5,5,5,3,3,3,3,3,4,4,4,4,4,4],[4,4,4,4,4,4,4,4,4,4,4,4,4,5,3,3,5,5,3,3,3,3,4,4,4,4],[4,4,4,4,4,4,4,4,4,4,4,4,5,3,3,5,5,5,5,5,3,3,4,4,4,4],[4,4,4,4,4,4,4,4,4,4,4,4,5,5,5,5,4,5,5,5,5,5,4,4,4,4],[4,4,4,4,4,4,4,4,4,4,4,4,4,5,5,4,4,4,4,5,5,4,4,4,4,4],[4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4]],
+  [[1,1,0,0,1,1,1,1,1,1,0,0,0,0,0,1,1,1,1,1,1,0,0,0,1,1],[1,0,0,0,0,1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,0,0,0,0,0,1],[0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1,1],[1,0,1,1,1,1,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,2],[1,1,1,2,2,2,2,2,2,2,1,1,1,2,2,2,1,6,6,1,1,1,9,9,2,2],[1,2,2,2,2,5,5,9,9,2,2,1,2,2,2,6,6,6,6,6,9,9,6,6,9,9],[2,2,2,5,5,5,5,9,9,9,2,2,2,2,2,2,6,6,6,6,6,6,6,6,6,9],[5,5,2,5,5,5,9,9,9,9,9,2,2,2,6,6,6,6,6,4,6,6,6,9,9,9],[5,5,5,5,5,5,5,5,5,9,9,9,9,2,9,6,6,6,9,4,4,6,6,6,9,9],[2,9,5,5,4,5,5,9,9,9,9,9,9,9,9,9,9,9,9,4,4,6,6,6,6,9],[5,5,5,4,4,9,9,9,9,9,9,9,6,6,6,9,9,9,4,4,4,9,9,6,9,9],[5,5,9,4,6,6,6,9,9,9,6,6,6,6,6,9,9,9,4,4,9,9,9,9,9,9],[3,3,9,9,4,6,6,6,6,3,6,6,6,9,7,9,7,4,4,4,3,7,3,9,3,3],[3,3,3,3,4,6,6,6,6,6,6,6,3,7,7,3,7,4,4,7,3,7,7,3,3,3],[3,7,3,4,4,4,6,6,6,6,6,6,6,7,3,7,4,4,4,7,3,3,7,3,3,3],[3,7,7,4,6,6,6,6,4,4,6,6,6,8,8,8,4,4,7,7,5,5,5,3,7,3],[3,3,7,6,6,6,8,4,4,4,8,6,6,6,8,8,8,8,8,5,5,5,5,7,7,3],[7,3,7,8,8,8,8,4,4,8,8,6,5,5,5,5,8,5,5,5,5,5,8,7,3,3],[7,7,8,8,8,8,8,4,4,8,8,8,8,5,5,5,5,5,5,5,5,8,8,5,5,3],[3,7,8,8,8,8,4,4,4,8,8,8,8,8,8,5,5,5,5,5,5,5,5,5,5,5],[7,8,8,8,8,8,4,4,8,8,8,8,5,5,5,5,5,4,4,4,5,5,5,5,3,3],[7,7,7,8,8,4,4,4,8,8,8,5,5,5,5,5,4,4,4,4,5,5,3,7,7,3],[3,7,3,7,7,4,4,4,8,7,7,8,8,8,7,7,4,4,4,5,5,5,5,7,3,3],[3,7,3,7,3,4,4,4,8,7,8,8,7,8,7,4,4,4,3,7,5,5,5,5,5,3],[3,3,3,7,4,4,4,4,7,7,8,7,7,8,7,4,4,4,3,7,7,3,7,3,3,3],[3,3,3,3,3,3,7,7,7,3,3,7,3,3,7,4,4,4,3,3,7,7,7,3,3,3],[3,3,3,3,3,3,3,3,7,3,3,3,3,3,4,4,4,3,3,3,3,7,3,3,3,3]],
+  [[1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,0,0,0],[1,1,1,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0,1],[1,1,0,0,0,0,0,0,1,1,1,1,1,1,0,1,1,0,0,1,1,1,1,0,1,1],[1,1,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,1,1,1,1,1,1],[1,1,1,1,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,1,1,1,1,1,1],[1,1,1,1,1,1,0,0,1,1,1,1,1,1,1,0,0,1,0,1,1,1,1,0,0,0],[0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,0,0],[0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0,0,1],[0,1,1,1,1,1,1,1,1,1,1,1,1,1,2,2,1,1,1,1,1,1,1,1,1,1],[1,1,1,1,2,2,1,1,1,1,1,1,1,1,2,2,2,1,1,1,1,1,1,1,1,1],[1,1,1,2,2,2,2,1,1,1,1,1,1,2,2,2,2,2,1,1,1,1,1,2,1,1],[1,1,2,2,2,2,2,2,1,1,1,1,2,2,2,2,2,2,2,1,1,1,2,2,2,1],[4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4],[5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5],[5,5,3,5,5,5,3,5,5,5,3,5,5,5,3,5,5,5,3,5,5,5,3,5,5,5],[4,3,3,3,4,3,3,3,4,3,3,3,4,3,3,3,4,3,3,3,4,3,3,3,4,3],[4,4,5,4,4,4,4,5,4,4,4,4,5,4,4,4,4,5,4,4,4,4,5,4,4,4],[4,5,5,5,4,4,5,5,5,4,4,5,5,5,4,4,5,5,5,4,4,5,5,5,4,4],[5,5,5,5,3,5,5,5,5,3,5,5,5,5,3,5,5,5,5,3,5,5,5,5,3,5],[6,5,5,3,3,3,5,5,3,3,3,5,5,3,3,3,5,5,3,3,3,5,5,3,3,6],[6,6,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,3,6,6],[7,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,7],[7,7,7,7,6,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,6,7,7,7,7],[7,7,7,7,6,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,7,6,7,7,7,7],[5,7,6,4,6,5,7,7,4,7,5,4,7,4,4,5,7,4,4,7,5,6,4,6,7,5],[5,5,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,6,5,5],[5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5]],
+];
+
+// ── FishAI ────────────────────────────────────────────────────
+const enum FishType { SMOOTH=0, ACTIVE=1, HYPER=2, GLIDER=3 }
+
+class FishAI {
+  private type: FishType;
+  private barHeight: number;
+  private fishHeight: number;
+  y: number;
+  private speed = 0;
+  private targetY = 0;
+  private direction = -1;
+  private currentDifficulty: number;
+  private baseSpeed = 0;
+  private difficultyFactor = 0;
+  private diffCurve = 0;
+
+  // Hyper
+  private hyperBaseSpeed = 0; private hyperJitterBias = 0;
+  private burstCooldownMs = 0; private hyperJitterMs = 0;
+  private hyperBurstAnimMs = 0; private hyperBurstAnimating = false;
+  private hyperBurstStartY = 0; private hyperBurstEndY = 0;
+
+  // Glider
+  private directionSwitchMs = 0; private directionTimerMs = 0; private speedTimerMs = 0;
+
+  // Active
+  private activeTargetY = 0; private activeSpeedPxPerMs = 0;
+  private dashMultiplier = 1; private activeTravelMs = 0; private dashMsRemaining = 0;
+
+  // Smooth
+  private smoothIsDashing = false;
+  private smoothDashCooldownMs = 0; private smoothDashElapsedMs = 0;
+  private smoothDashTotalMs = 0; private smoothTravelMs = 0;
+  private smoothDashStartY = 0; private smoothDashTargetY = 0;
+  private smoothTargetY = 0; private smoothSpeedPxPerMs = 0;
+
+  constructor(type: FishType, initialY: number, barHeight: number, fishHeight: number, difficulty: number) {
+    this.type = type; this.y = initialY;
+    this.barHeight = barHeight; this.fishHeight = fishHeight;
+    this.currentDifficulty = difficulty;
+    this.setDifficulty(difficulty);
+    this.initForType();
+  }
+
+  private rand(lo: number, hi: number): number {
+    return Math.floor(Math.random() * (hi - lo + 1)) + lo;
+  }
+
+  private rollHyperBaseSpeed(d: number): number {
+    let px: number;
+    if      (d<=15) px = this.rand(80,120);
+    else if (d<=30) px = this.rand(120,180);
+    else if (d<=50) px = this.rand(180,260);
+    else if (d<=70) px = this.rand(260,360);
+    else if (d<=90) px = this.rand(360,480);
+    else            px = this.rand(480,620);
+    return px / 100;
+  }
+
+  private hyperBurstDist(d: number): number {
+    if(d<=14) return this.rand(23,38); if(d<=30) return this.rand(38,56);
+    if(d<=50) return this.rand(56,94); if(d<=70) return this.rand(75,131);
+    if(d<=90) return this.rand(94,169); return this.rand(101,188);
+  }
+
+  private pickHyperTarget(): void {
+    const bottom = this.barHeight - this.fishHeight;
+    const dist = this.smoothSubtleDist(this.currentDifficulty);
+    this.targetY = Math.random()<0.5 ? Math.min(bottom,this.y+dist) : Math.max(0,this.y-dist);
+  }
+
+  private rollDirSwitchMs(d: number): number {
+    if(d<=15) return this.rand(1500,2000); if(d<=30) return this.rand(1250,1490);
+    if(d<=50) return this.rand(1000,1240); if(d<=70) return this.rand(700,900);
+    if(d<=90) return this.rand(300,600); return this.rand(1200,2100);
+  }
+
+  private rollGliderSpeed(d: number): number {
+    let lo:number,hi:number;
+    if(d<=15){lo=100;hi=200;}else if(d<=30){lo=150;hi=275;}else if(d<=50){lo=200;hi=350;}
+    else if(d<=70){lo=250;hi=425;}else if(d<=90){lo=300;hi=500;}else{lo=350;hi=600;}
+    return (this.rand(lo,hi)/100) * (1 + this.diffCurve*0.35);
+  }
+
+  private distByDiff(d: number): number {
+    if(d<=14) return this.rand(10,25); if(d<=30) return this.rand(25,55); return this.rand(35,80);
+  }
+
+  private dashChance(d: number): number {
+    if(d<=14) return 5; if(d<=30) return 10; if(d<=50) return 18;
+    if(d<=70) return 30; if(d<=90) return 45; return 60;
+  }
+
+  private timeByDiff(d: number): number {
+    if(d<=14) return this.rand(300,400); if(d<=30) return this.rand(275,375);
+    if(d<=50) return this.rand(250,350); if(d<=70) return this.rand(225,325);
+    return this.rand(150,325);
+  }
+
+  private smoothDashDist(d: number): number {
+    if(d<=14) return this.rand(30,50); if(d<=30) return this.rand(50,75);
+    if(d<=50) return this.rand(75,125); if(d<=70) return this.rand(100,175);
+    return this.rand(125,250);
+  }
+
+  private smoothSubtleDist(d: number): number {
+    if(d<=14) return this.rand(10,20); if(d<=30) return this.rand(20,40);
+    if(d<=50) return this.rand(30,60); if(d<=70) return this.rand(40,80);
+    return this.rand(45,145);
+  }
+
+  setDifficulty(d: number): void {
+    d = Math.max(1, Math.min(100, d));
+    this.diffCurve = Math.pow(d/100, 1.4);
+    this.difficultyFactor = 0.35 + this.diffCurve * 1.05;
+    if (this.type === FishType.GLIDER) {
+      this.speed = this.rollGliderSpeed(d);
+      this.directionSwitchMs = this.rollDirSwitchMs(d);
+      this.directionTimerMs = this.directionSwitchMs;
+    } else if (this.type === FishType.HYPER) {
+      this.hyperBaseSpeed = this.rollHyperBaseSpeed(d);
+      this.speed = this.hyperBaseSpeed * this.difficultyFactor;
+      if (!this.hyperBurstAnimating) this.pickHyperTarget();
+    }
+  }
+
+  private initForType(): void {
+    switch(this.type) {
+      case FishType.SMOOTH: this.initSmooth(this.currentDifficulty); break;
+      case FishType.ACTIVE: this.initActive(this.currentDifficulty); break;
+      case FishType.HYPER:
+        this.hyperBaseSpeed = this.rollHyperBaseSpeed(this.currentDifficulty);
+        this.speed = this.hyperBaseSpeed * this.difficultyFactor;
+        this.pickHyperTarget();
+        this.burstCooldownMs = this.rand(50,100);
+        this.hyperJitterMs = this.rand(50,150);
+        break;
+      case FishType.GLIDER:
+        this.speed = this.rollGliderSpeed(this.currentDifficulty);
+        this.speedTimerMs = 1500 + this.rand(0,1499);
+        this.directionSwitchMs = this.rollDirSwitchMs(this.currentDifficulty);
+        this.directionTimerMs = this.directionSwitchMs;
+        this.direction = Math.random()<0.5 ? 1 : -1;
+        break;
+    }
+    if (this.type !== FishType.GLIDER) this.speed = this.baseSpeed * this.difficultyFactor;
+  }
+
+  private initSmooth(d: number): void {
+    this.currentDifficulty = d; this.diffCurve = d/100;
+    this.y = this.barHeight - this.fishHeight;
+    this.smoothIsDashing = false;
+    this.smoothDashCooldownMs = this.rand(300,600);
+    this.pickSmoothSubtle(d);
+  }
+
+  private initActive(d: number): void {
+    this.currentDifficulty = d; this.diffCurve = d/100;
+    if (this.y <= 0) this.y = (this.barHeight - this.fishHeight)/2;
+    this.pickActiveTarget(d); this.dashMsRemaining = 0; this.dashMultiplier = 1;
+  }
+
+  private pickActiveTarget(d: number): void {
+    const bottom = this.barHeight - this.fishHeight;
+    const dist = this.distByDiff(d), t = this.timeByDiff(d);
+    const down = Math.random()<0.5;
+    this.activeTargetY = Math.max(0, Math.min(bottom, down ? this.y+dist : this.y-dist));
+    if (this.activeTargetY === this.y) this.activeTargetY = Math.min(bottom, this.y+dist);
+    this.activeSpeedPxPerMs = Math.abs(this.activeTargetY - this.y) / t;
+    this.activeTravelMs = t;
+    if (this.rand(0,99) < this.dashChance(d)) { this.dashMsRemaining=500; this.dashMultiplier=2.8; }
+    else { this.dashMsRemaining=0; this.dashMultiplier=1; }
+  }
+
+  private doActiveTick(ms: number): void {
+    if (this.dashMsRemaining>0) { this.dashMsRemaining-=ms; if(this.dashMsRemaining<=0) this.dashMultiplier=1; }
+    const move = this.activeSpeedPxPerMs * ms * this.dashMultiplier;
+    const diff = this.activeTargetY - this.y;
+    if (Math.abs(diff)<=move || this.activeTravelMs<=0) { this.y=this.activeTargetY; this.pickActiveTarget(this.currentDifficulty); }
+    else { this.y += Math.sign(diff)*move; this.activeTravelMs-=ms; }
+  }
+
+  private doHyperTick(ms: number): void {
+    const bottom = this.barHeight - this.fishHeight;
+    this.hyperJitterMs -= ms;
+    if (this.hyperJitterMs<=0) { this.hyperJitterMs=this.rand(50,150); this.hyperJitterBias=(Math.random()-0.5)*1.4; }
+    if (this.hyperBurstAnimating) {
+      this.hyperBurstAnimMs -= ms;
+      if (this.hyperBurstAnimMs<=0) {
+        this.y=this.hyperBurstEndY; this.hyperBurstAnimating=false;
+        this.burstCooldownMs=this.rand(50,100); this.pickHyperTarget();
+      } else {
+        const p = 1-(this.hyperBurstAnimMs/150);
+        const e = p<0.5 ? 2*p*p : 1-Math.pow(-2*p+2,2)/2;
+        this.y = this.hyperBurstStartY + (this.hyperBurstEndY-this.hyperBurstStartY)*e + this.hyperJitterBias*0.2;
+      }
+    } else if (this.burstCooldownMs<=0 && this.rand(0,99) < 20+Math.floor(this.diffCurve*25)) {
+      this.hyperBurstAnimating=true; this.hyperBurstAnimMs=150; this.hyperBurstStartY=this.y;
+      const dist = this.hyperBurstDist(this.currentDifficulty);
+      const sign = Math.random()<0.5 ? 1 : -1;
+      this.hyperBurstEndY = Math.max(0, Math.min(bottom, this.y+sign*dist));
+    } else {
+      if (this.burstCooldownMs>0) this.burstCooldownMs-=ms;
+      const diff = this.targetY - this.y;
+      if (Math.abs(diff)>1) this.y += (this.hyperBaseSpeed*1.25)*Math.sign(diff) + this.hyperJitterBias*0.4;
+      if (Math.abs(this.targetY-this.y)<2) this.pickHyperTarget();
+    }
+    if (this.y<=0 || this.y>=bottom) this.pickHyperTarget();
+  }
+
+  private doGliderTick(ms: number): void {
+    this.speedTimerMs -= ms;
+    if (this.speedTimerMs<=0) { this.speed=this.rollGliderSpeed(this.currentDifficulty); this.speedTimerMs=1500+this.rand(0,1499); }
+    if (this.rand(0,999)<7 || this.directionTimerMs<=0) { this.direction*=-1; this.directionTimerMs=this.rollDirSwitchMs(this.currentDifficulty); }
+    this.directionTimerMs -= ms;
+    this.y += this.direction * this.speed;
+    const bottom = this.barHeight - this.fishHeight;
+    if (this.y<=0) { this.y=0; this.direction=1; } else if (this.y>=bottom) { this.y=bottom; this.direction=-1; }
+  }
+
+  private startSmoothDash(d: number): void {
+    const bottom = this.barHeight - this.fishHeight;
+    this.smoothIsDashing=true; this.smoothDashElapsedMs=0; this.smoothDashCooldownMs=800;
+    this.smoothDashStartY=this.y;
+    const dist = this.smoothDashDist(d);
+    const down = Math.random()<0.5;
+    this.smoothDashTargetY = down ? Math.min(bottom,this.y+dist) : Math.max(0,this.y-dist);
+    this.smoothDashTotalMs = d<=50 ? this.rand(260,340) : this.rand(220,300);
+  }
+
+  private doSmoothDashTick(ms: number): void {
+    this.smoothDashElapsedMs += ms;
+    const t = Math.min(1, this.smoothDashElapsedMs / this.smoothDashTotalMs);
+    const curve = 1 - Math.pow(1-t, 3.2);
+    this.y = this.smoothDashStartY + (this.smoothDashTargetY - this.smoothDashStartY)*curve;
+    if (t>=1) { this.y=this.smoothDashTargetY; this.smoothIsDashing=false; this.pickSmoothSubtle(this.currentDifficulty); }
+  }
+
+  private pickSmoothSubtle(d: number): void {
+    const bottom = this.barHeight - this.fishHeight;
+    const dist = this.smoothSubtleDist(d);
+    const down = Math.random()<0.5;
+    this.smoothTargetY = down ? Math.min(bottom,this.y+dist) : Math.max(0,this.y-dist);
+    this.smoothTravelMs = this.rand(900,1400);
+    this.smoothSpeedPxPerMs = Math.abs(this.smoothTargetY-this.y) / this.smoothTravelMs;
+  }
+
+  private doSmoothTick(ms: number, d: number): void {
+    if (this.smoothDashCooldownMs>0) this.smoothDashCooldownMs-=ms;
+    if (this.smoothIsDashing) { this.doSmoothDashTick(ms); return; }
+    if (this.smoothDashCooldownMs<=0 && this.rand(0,99)<(d<=50?30:55)) { this.startSmoothDash(d); return; }
+    const move = this.smoothSpeedPxPerMs * ms;
+    const diff = this.smoothTargetY - this.y;
+    if (Math.abs(diff)<=move) { this.y=this.smoothTargetY; this.pickSmoothSubtle(d); }
+    else this.y += Math.sign(diff)*move;
+  }
+
+  update(ms: number, difficulty: number): number {
+    if (difficulty !== this.currentDifficulty) { this.currentDifficulty=difficulty; this.setDifficulty(difficulty); }
+    switch(this.type) {
+      case FishType.SMOOTH: this.doSmoothTick(ms, difficulty); break;
+      case FishType.ACTIVE: this.doActiveTick(ms); break;
+      case FishType.HYPER:  this.doHyperTick(ms); break;
+      case FishType.GLIDER: this.doGliderTick(ms); break;
+    }
+    const bottom = this.barHeight - this.fishHeight;
+    this.y = Math.max(0, Math.min(bottom, this.y));
+    return this.y;
+  }
+}
+
+// ── Game State ────────────────────────────────────────────────
+type GameScreen = "menu" | "game" | "market" | "victory";
+type FishingState = "idle" | "searching" | "bite";
+
+interface GameState {
+  screen: GameScreen;
+  fishingState: FishingState;
+  currentStage: number;
+  stageScore: number;
+  totalScore: number;
+  timeRemaining: number;
+  sessionActive: boolean;
+  stageEnded: boolean;
+  waitingForHook: boolean;
+  isMiniGameActive: boolean;
+  rodLevel: number;
+  greenHeight: number;
+  bobberInventory: number[];
+  bobberTypes: number[];
+  decayRate: number;
+  biteChance: number;
+  priceMultiplier: number;
+  // mini game physics
+  fishY: number;
+  greenY: number;
+  greenProgressWidth: number;
+  barVelocity: number;
+  spacePressed: boolean;
+  newRound: boolean;
+  tickCounter: number;
+  fishAI: FishAI | null;
+  // fishing state
+  searchAccumulator: number;
+  biteStartTime: number;
+  // mod
+  difficulty: number;
+  fishType: FishType;
+  modVisible: boolean;
+}
+
+// ── Renderer ──────────────────────────────────────────────────
+class Game {
+  private canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D;
+  private ui: HTMLDivElement;
+  private state: GameState;
+  private gameLoopId: number | null = null;
+  private countdownId: number | null = null;
+  private lastTickTime = 0;
+
+  constructor(canvas: HTMLCanvasElement, uiLayer: HTMLDivElement) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext("2d")!;
+    this.ui = uiLayer;
+    this.state = this.defaultState();
+    this.bindKeys();
+    this.showScreen("menu");
+  }
+
+  private defaultState(): GameState {
+    return {
+      screen:"menu", fishingState:"idle",
+      currentStage:1, stageScore:0, totalScore:0,
+      timeRemaining:90, sessionActive:false, stageEnded:false,
+      waitingForHook:false, isMiniGameActive:false,
+      rodLevel:0, greenHeight:100,
+      bobberInventory:[0,0,0,0,0], bobberTypes:[0,0,0,0,0],
+      decayRate:PROGRESS_DECAY, biteChance:0.5, priceMultiplier:1,
+      fishY:BAR_H-30, greenY:BAR_H-100, greenProgressWidth:BAR_H/4,
+      barVelocity:0, spacePressed:false, newRound:false, tickCounter:0, fishAI:null,
+      searchAccumulator:0, biteStartTime:0,
+      difficulty:10, fishType:FishType.SMOOTH, modVisible:false,
+    };
+  }
+
+  private bindKeys(): void {
+    document.addEventListener("keydown", (e) => {
+      if (e.code === "Space") { e.preventDefault(); this.state.spacePressed = true; }
+      if (e.code === "KeyR") this.resetMiniGame();
+      if (e.code === "F7")   this.toggleMod();
+    });
+    document.addEventListener("keyup", (e) => {
+      if (e.code === "Space") this.state.spacePressed = false;
+    });
+  }
+
+  // ── Screen Management ──────────────────────────────────────
+  private showScreen(screen: GameScreen): void {
+    this.state.screen = screen as GameScreen;
+    this.ui.innerHTML = "";
+    this.ctx.clearRect(0,0,WIN_W,WIN_H);
+    switch(screen) {
+      case "menu":    this.renderMenu(); this.buildMenuUI(); break;
+      case "game":    this.renderGame(); this.buildGameUI(); break;
+      case "market":  this.renderMarket(); this.buildMarketUI(); break;
+      case "victory": this.renderVictory(); this.buildVictoryUI(); break;
+    }
+  }
+
+  // ── Canvas Rendering ───────────────────────────────────────
+  private drawPixelArt(grid: number[][], pal: string[], tileSize: number, ox=0, oy=0): void {
+    for (let r=0; r<grid.length; r++) {
+      for (let c=0; c<grid[r].length; c++) {
+        const idx = grid[r][c];
+        if (idx>=0 && idx<pal.length) {
+          this.ctx.fillStyle = pal[idx];
+          this.ctx.fillRect(ox+c*tileSize, oy+r*tileSize, tileSize, tileSize);
+        }
+      }
+    }
+  }
+
+  private renderMenu(): void {
+    const ctx = this.ctx;
+    ctx.fillStyle = "#0A1E50";
+    ctx.fillRect(0,0,WIN_W,WIN_H);
+    this.drawPixelArt(MENU_BG, MENU_PAL, 40);
+    ctx.fillStyle = "white";
+    ctx.font = "bold 35px Georgia";
+    ctx.textAlign = "center";
+    ctx.fillText("Junior's Fishing Adventure", WIN_W/2, 85);
+  }
+
+  private renderGame(): void {
+    const ctx = this.ctx;
+    const s = this.state;
+    ctx.fillStyle = "#0A1E50";
+    ctx.fillRect(0,0,WIN_W,WIN_H);
+    this.drawPixelArt(STAGE_BGS[s.currentStage-1], STAGE_PALS[s.currentStage-1], BG_TILE);
+
+    // Overlay (darken bar area when not active)
+    if (!s.isMiniGameActive && s.fishingState !== "bite") {
+      ctx.fillStyle = "rgba(64,64,64,0.8)";
+      ctx.fillRect(670, BAR_Y, 95, BAR_H);
+    }
+
+    // Progress bar background
+    ctx.fillStyle = "#CC0000";
+    ctx.strokeStyle = "black"; ctx.lineWidth = 3;
+    ctx.fillRect(PROG_X, BAR_Y, 25, BAR_H);
+    ctx.strokeRect(PROG_X, BAR_Y, 25, BAR_H);
+    // Green progress
+    const gw = s.greenProgressWidth;
+    ctx.fillStyle = "#00CC00";
+    ctx.fillRect(PROG_X, BAR_Y + BAR_H - gw, 25, gw);
+
+    // Fishing bar
+    ctx.fillStyle = "#ADD8E6";
+    ctx.fillRect(BAR_X, BAR_Y, BAR_W, BAR_H);
+    ctx.strokeStyle = "black"; ctx.lineWidth = 3;
+    ctx.strokeRect(BAR_X, BAR_Y, BAR_W, BAR_H);
+
+    // Green zone
+    ctx.fillStyle = "rgba(0,200,0,0.7)";
+    ctx.fillRect(BAR_X+3, BAR_Y + s.greenY, BAR_W-6, s.greenHeight);
+    ctx.strokeStyle = "black"; ctx.lineWidth = 2;
+    ctx.strokeRect(BAR_X+3, BAR_Y + s.greenY, BAR_W-6, s.greenHeight);
+
+    // Fish indicator (yellow oval)
+    ctx.fillStyle = "yellow";
+    ctx.strokeStyle = "black"; ctx.lineWidth = 2;
+    ctx.beginPath();
+    const fx = BAR_X + BAR_W/2, fy = BAR_Y + s.fishY + 15;
+    ctx.ellipse(fx, fy, (BAR_W-10)/2, 12, 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke();
+
+    // Labels
+    const m = Math.floor(s.timeRemaining/60), sec = s.timeRemaining%60;
+    ctx.textAlign = "right";
+    ctx.fillStyle = s.timeRemaining<=10 ? "red" : "white";
+    ctx.font = "bold 34px Courier New";
+    ctx.fillText(`${m}:${sec.toString().padStart(2,"0")}`, 880, 55);
+
+    ctx.fillStyle = "#C8DCFF"; ctx.font = "18px Courier New";
+    ctx.fillText(`Score: ${s.stageScore}g`, 880, 88);
+
+    ctx.fillStyle = "yellow"; ctx.font = "16px Courier New";
+    ctx.fillText(`Stage: ${s.currentStage}/5`, 880, 113);
+  }
+
+  private renderMarket(): void {
+    const ctx = this.ctx;
+    ctx.fillStyle = rgb(210,170,120);
+    ctx.fillRect(0,0,WIN_W,WIN_H);
+    this.drawPixelArt(MARKET_BG, MARKET_PAL, 25);
+
+    ctx.fillStyle = "black"; ctx.textAlign = "left";
+    ctx.font = "bold 20px Georgia";
+    ctx.fillText("Howdy! Name's Sam Marlin.", 90, 90);
+    ctx.fillText("Welcome to my shop!", 90, 120);
+    ctx.fillText("Fancy for some upgrades?", 90, 150);
+
+    // Earnings box
+    ctx.fillStyle = rgb(255,215,0);
+    ctx.fillRect(10,470,220,40);
+    ctx.strokeStyle="black"; ctx.lineWidth=2;
+    ctx.strokeRect(10,470,220,40);
+    ctx.fillStyle=rgb(139,69,19); ctx.textAlign="center";
+    ctx.font="bold 16px Courier New";
+    ctx.fillText(`Earnings: ${this.state.stageScore}g`, 120, 497);
+
+    // Stage box
+    ctx.fillStyle="white";
+    ctx.fillRect(10,430,220,40);
+    ctx.strokeStyle="black"; ctx.strokeRect(10,430,220,40);
+    ctx.fillStyle="black";
+    ctx.fillText(`Stage: ${this.state.currentStage}/5`, 120, 457);
+
+    // Inventory panel
+    ctx.fillStyle="rgb(255,248,220)";
+    ctx.fillRect(10,510,220,180);
+    ctx.strokeStyle="black"; ctx.strokeRect(10,510,220,180);
+    ctx.fillStyle="black"; ctx.font="bold 13px Courier New";
+    ctx.fillText("INVENTORY",120,535);
+    ctx.beginPath(); ctx.moveTo(20,545); ctx.lineTo(220,545); ctx.stroke();
+
+    const rodNames=["Poor","Basic","Fine","Sturdy","Reinforced","Carbon Fiber","Master"];
+    const rodName = this.state.rodLevel < rodNames.length ? rodNames[this.state.rodLevel] : "Master";
+    ctx.font="11px Courier New"; ctx.textAlign="left";
+    ctx.fillText(`Rod: ${rodName} (Lv${this.state.rodLevel})`, 20, 565);
+    for(let i=0;i<5;i++){
+      const inv=this.state.bobberInventory[i];
+      if(inv>0){
+        const tn={1:"Ease",2:"Chum",3:"Golden"}[this.state.bobberTypes[i]]||"?";
+        ctx.fillStyle="black";
+        ctx.fillText(`Slot ${i+1}: ${tn} (${inv}/10)`, 20, 583+i*18);
+      } else {
+        ctx.fillStyle="gray";
+        ctx.fillText(`Slot ${i+1}: Empty`, 20, 583+i*18);
+      }
+    }
+  }
+
+  private renderVictory(): void {
+    const ctx = this.ctx;
+    ctx.fillStyle = rgb(255,215,0);
+    ctx.fillRect(0,0,WIN_W,WIN_H);
+    this.drawPixelArt(VICTORY_BG, VICTORY_PAL, 32);
+    ctx.fillStyle=rgb(139,69,19); ctx.textAlign="center";
+    ctx.font="bold 36px Georgia";
+    ctx.fillText("CONGRATULATIONS!", WIN_W/2, 50);
+    ctx.font="20px Courier New";
+    ctx.fillText("You went home safe and satisfied.", WIN_W/2, 95);
+    ctx.fillText("The captain admires your fishing prowess.", WIN_W/2, 125);
+  }
+
+  // ── UI Button Helpers ──────────────────────────────────────
+  private makeBtn(label: string, x: number, y: number, w: number, h: number,
+                  bg: string, fg="white", fontSize=14): HTMLButtonElement {
+    const btn = document.createElement("button");
+    btn.textContent = label;
+    Object.assign(btn.style, {
+      position:"absolute", left:`${x}px`, top:`${y}px`,
+      width:`${w}px`, height:`${h}px`,
+      background:bg, color:fg,
+      border:"2px solid #333", borderRadius:"4px",
+      fontFamily:"Courier New", fontSize:`${fontSize}px`, fontWeight:"bold",
+      cursor:"pointer", padding:"2px",
+    });
+    this.ui.appendChild(btn);
+    return btn;
+  }
+
+  private makeLabel(text: string, x: number, y: number, w: number, h: number,
+                    color="white", fontSize=13, id=""): HTMLDivElement {
+    const lbl = document.createElement("div");
+    lbl.textContent = text;
+    if (id) lbl.id = id;
+    Object.assign(lbl.style, {
+      position:"absolute", left:`${x}px`, top:`${y}px`,
+      width:`${w}px`, height:`${h}px`,
+      color, fontFamily:"Courier New", fontSize:`${fontSize}px`,
+      textAlign:"center", display:"flex", alignItems:"center", justifyContent:"center",
+      pointerEvents:"none",
+    });
+    this.ui.appendChild(lbl);
+    return lbl;
+  }
+
+  // ── Menu UI ────────────────────────────────────────────────
+  private buildMenuUI(): void {
+    const start = this.makeBtn("START ADVENTURE!", 350,350,200,40,"#4CAF50","white",15);
+    start.onclick = () => this.startNewGame();
+    const quit = this.makeBtn("QUIT",350,420,200,40,"#D32F2F","white",15);
+    quit.onclick = () => { if(confirm("Quit game?")) window.close(); };
+  }
+
+  // ── Game UI ────────────────────────────────────────────────
+  private buildGameUI(): void {
+    this.makeLabel("", 630, 580, 280, 30, "yellow", 12, "status-lbl");
+    this.makeLabel("", 630, 610, 280, 25, "white",  11, "result-lbl");
+    this.makeLabel("", 630, 635, 280, 25, "white",  11, "guide-lbl");
+
+    // Inventory slots
+    for(let i=0;i<5;i++){
+      const btn = this.makeBtn("[  ]",770,120+i*65,100,60,"#B4B4B4","black",14);
+      btn.id = `inv-${i}`;
+    }
+
+    // Hook button
+    const hook = this.makeBtn("Cast line",770,450,100,100,"#FFFFC8","black",11);
+    hook.id = "hook-btn";
+    hook.onclick = () => this.handleHookClick();
+
+    this.updateHookVisuals();
+    this.updateInvButtons();
+  }
+
+  private setLabel(id: string, text: string, color?: string): void {
+    const el = document.getElementById(id) as HTMLDivElement|null;
+    if (!el) return;
+    el.textContent = text;
+    if (color) el.style.color = color;
+  }
+
+  private updateHookVisuals(): void {
+    const btn = document.getElementById("hook-btn") as HTMLButtonElement|null;
+    if (!btn) return;
+    const s = this.state;
+    btn.disabled = s.stageEnded;
+    switch(s.fishingState){
+      case "idle":
+        btn.textContent="Cast line"; btn.style.background="#FFFFC8";
+        this.setLabel("status-lbl","Click the button to fish!","yellow");
+        this.setLabel("guide-lbl","");
+        break;
+      case "searching":
+        btn.textContent="Search..."; btn.style.background="#C8E6FF";
+        this.setLabel("status-lbl","Stay alert...","yellow");
+        this.setLabel("guide-lbl","");
+        break;
+      case "bite":
+        btn.textContent="HOOK!"; btn.style.background="#C8FFC8";
+        this.setLabel("status-lbl","Press SPACE to control the hook.","yellow");
+        this.setLabel("guide-lbl","(Hold SPACE to rise, release to fall)","white");
+        break;
+    }
+  }
+
+  private updateInvButtons(): void {
+    const icons:{[k:number]:string}={1:"[B]",2:"[C]",3:"[G]"};
+    const colors:{[k:number]:string}={1:"#ADD8E6",2:"#FFB6C1",3:"#FFD700"};
+    for(let i=0;i<5;i++){
+      const btn = document.getElementById(`inv-${i}`) as HTMLButtonElement|null;
+      if(!btn) continue;
+      const inv=this.state.bobberInventory[i];
+      if(inv>0){
+        btn.textContent=`${icons[this.state.bobberTypes[i]]||"[ ]"} ${inv}`;
+        btn.style.background=colors[this.state.bobberTypes[i]]||"#B4B4B4";
+      } else {
+        btn.textContent="[  ]"; btn.style.background="#B4B4B4";
+      }
+    }
+  }
+
+  // ── Market UI ─────────────────────────────────────────────
+  private buildMarketUI(): void {
+    const s = this.state;
+    const mkBtn=(lbl:string,x:number,y:number,bg:string,fn:()=>void)=>{
+      const b=this.makeBtn(lbl,x,y,130,70,bg,"black",11); b.onclick=fn; return b;
+    };
+    mkBtn("Rod Upgrade\n250g-10000g",540,20,"#E8E8E8",()=>this.purchaseRod());
+    mkBtn("Ease Bobber\n500g (10 uses)",680,20,"#ADD8E6",()=>this.purchaseBobber(1,500,"Ease Bobber"));
+    mkBtn("Chum Bobber\n1000g (10 uses)",540,150,"#FFB6C1",()=>this.purchaseBobber(2,1000,"Chum Bobber"));
+    mkBtn("Golden Bobber\n2000g (10 uses)",680,150,"#FFD700",()=>this.purchaseBobber(3,2000,"Golden Bobber"));
+
+    const ready=this.makeBtn("→ READY! ←",320,530,250,50,"#64B464","white",16);
+    ready.onclick=()=>this.advanceToNextStage();
+
+    const menu=this.makeBtn("MAIN MENU",350,600,200,40,"#B4B4B4","black",14);
+    menu.onclick=()=>{
+      if(confirm("Leave session? Progress will be lost!")) {
+        this.cancelTimers(); this.showScreen("menu");
+      }
+    };
+  }
+
+  // ── Victory UI ────────────────────────────────────────────
+  private buildVictoryUI(): void {
+    const btn=this.makeBtn("Back to Menu",350,145,200,50,"#64B464","white",16);
+    btn.onclick=()=>this.showScreen("menu");
+  }
+
+  // ── Game Flow ──────────────────────────────────────────────
+  private startNewGame(): void {
+    const s = this.state;
+    s.rodLevel=0; s.greenHeight=100;
+    s.bobberInventory=[0,0,0,0,0]; s.bobberTypes=[0,0,0,0,0];
+    s.decayRate=PROGRESS_DECAY; s.biteChance=0.5; s.priceMultiplier=1;
+    s.totalScore=0; s.modVisible=false;
+    this.resetToStage1();
+    this.showScreen("game");
+    setTimeout(()=>this.playIntroDialogue(), 100);
+  }
+
+  private playIntroDialogue(): void {
+    const lines = [
+      "Hey kid, you've been chosen for the Junior Fishers Club trip today.",
+      "Hope you've got the skills for your selected profession.",
+      "If you don't, I'll send you back home.",
+      "Now do me a favor and start fishing, okay?",
+      "There's a fishmonger who buys our catch for trip money.",
+      "This happens after the session. We've got no time to lose!",
+      "I need 500g before we continue to our next trip.",
+    ];
+    lines.forEach(l => alert(`Captain: ${l}`));
+    const s = this.state;
+    s.sessionActive=true; s.isMiniGameActive=false;
+    s.stageEnded=false; s.fishingState="idle";
+    this.updateHookVisuals(); this.resetMiniGame(); this.startCountdown();
+  }
+
+  private resetToStage1(): void {
+    const s = this.state;
+    s.currentStage=1; s.stageEnded=false; s.waitingForHook=false;
+    s.stageScore=0; s.timeRemaining=90;
+    s.difficulty = Math.floor((STAGE_DIFFICULTY[0][0]+STAGE_DIFFICULTY[0][1])/2);
+  }
+
+  private resetMiniGame(): void {
+    const s = this.state;
+    s.spacePressed=false; s.newRound=true; s.tickCounter=0;
+    s.barVelocity=0; s.fishY=BAR_H-30;
+    s.greenY=BAR_H-s.greenHeight; s.greenProgressWidth=BAR_H/4;
+    s.fishAI = new FishAI(s.fishType, s.fishY, BAR_H, FISH_H_PX, s.difficulty);
+  }
+
+  // ── Timers ────────────────────────────────────────────────
+  private cancelTimers(): void {
+    if (this.gameLoopId !== null) { clearInterval(this.gameLoopId); this.gameLoopId=null; }
+    if (this.countdownId !== null) { clearInterval(this.countdownId); this.countdownId=null; }
+    this.state.sessionActive = false;
+  }
+
+  private startGameLoop(): void {
+    if (this.gameLoopId !== null) return;
+    this.gameLoopId = window.setInterval(()=>this.gameTick(), TIMER_MS);
+  }
+
+  private startCountdown(): void {
+    if (this.countdownId !== null) return;
+    this.countdownId = window.setInterval(()=>this.tickCountdown(), 1000);
+  }
+
+  private tickCountdown(): void {
+    const s = this.state;
+    if (!s.sessionActive) return;
+    if (s.timeRemaining > 0) {
+      s.timeRemaining--;
+      this.renderGame();
+    } else {
+      clearInterval(this.countdownId!); this.countdownId=null;
+      if (s.isMiniGameActive) {
+        s.waitingForHook=true;
+        this.setLabel("status-lbl","Time ran out. LAST FISH!","red");
+        this.setLabel("guide-lbl","");
+      } else {
+        this.evaluateStageProgress();
+      }
+    }
+  }
+
+  // ── Fishing State Machine ─────────────────────────────────
+  private handleHookClick(): void {
+    const s = this.state;
+    if (s.isMiniGameActive || s.stageEnded) return;
+    switch(s.fishingState) {
+      case "idle":
+        s.fishingState="searching"; s.searchAccumulator=0;
+        this.updateHookVisuals(); this.startGameLoop(); break;
+      case "searching":
+        s.fishingState="idle"; this.updateHookVisuals(); break;
+      case "bite":
+        this.pickFishForCatch();
+        s.fishingState="idle"; this.updateHookVisuals();
+        this.startFishingMiniGame(); break;
+    }
+  }
+
+  private pickFishForCatch(): void {
+    const s = this.state;
+    const [lo,hi] = STAGE_DIFFICULTY[s.currentStage-1];
+    s.difficulty = Math.floor(Math.random()*(hi-lo+1))+lo;
+    const tc = Math.floor(Math.random()*100);
+    let ft: FishType;
+    if (s.currentStage<=2)
+      ft = tc<50?FishType.SMOOTH:tc<85?FishType.ACTIVE:tc<95?FishType.HYPER:FishType.GLIDER;
+    else if (s.currentStage<=4)
+      ft = tc<35?FishType.SMOOTH:tc<70?FishType.ACTIVE:tc<90?FishType.HYPER:FishType.GLIDER;
+    else
+      ft = tc<25?FishType.SMOOTH:tc<55?FishType.ACTIVE:tc<85?FishType.HYPER:FishType.GLIDER;
+    s.fishType = ft;
+  }
+
+  private updateFishingStateMachine(): void {
+    const s = this.state;
+    if (s.isMiniGameActive || s.stageEnded) return;
+    if (s.fishingState==="searching") {
+      s.searchAccumulator += TIMER_MS;
+      if (s.searchAccumulator >= SEARCH_CHECK_MS) {
+        s.searchAccumulator = 0;
+        if (Math.random() < s.biteChance) {
+          s.fishingState="bite"; s.biteStartTime=Date.now();
+          this.updateHookVisuals();
+        }
+      }
+    } else if (s.fishingState==="bite") {
+      if (Date.now()-s.biteStartTime > BITE_WINDOW_MS) {
+        s.fishingState="idle";
+        this.setLabel("status-lbl","You hooked but there was no fish!","orange");
+        this.updateHookVisuals();
+      }
+    }
+  }
+
+  private startFishingMiniGame(): void {
+    this.state.isMiniGameActive=true;
+    const btn=document.getElementById("hook-btn") as HTMLButtonElement|null;
+    if(btn) btn.disabled=true;
+    this.resetMiniGame(); this.startGameLoop();
+  }
+
+  private endFishingSession(): void {
+    const s = this.state;
+    s.isMiniGameActive=false; s.fishingState="idle";
+    this.updateHookVisuals();
+    if (s.waitingForHook) { s.waitingForHook=false; this.evaluateStageProgress(); }
+  }
+
+  // ── Game Tick ─────────────────────────────────────────────
+  private gameTick(): void {
+    const s = this.state;
+    if (s.screen !== "game") return;
+    s.tickCounter++;
+    this.updateFishingStateMachine();
+
+    if (s.isMiniGameActive && !s.stageEnded) {
+      // Physics
+      s.barVelocity += s.newRound ? GRAVITY_V : (s.spacePressed ? -UP_ACCEL : GRAVITY_V);
+      if (s.newRound) s.newRound=false;
+      s.barVelocity = Math.max(-MAX_BAR_SPEED, Math.min(MAX_BAR_SPEED, s.barVelocity));
+      s.greenY += s.barVelocity;
+      if (s.greenY < 0) { s.greenY=0; if(s.barVelocity<0) s.barVelocity=0; }
+      else if (s.greenY+s.greenHeight > BAR_H) { s.greenY=BAR_H-s.greenHeight; if(s.barVelocity>0) s.barVelocity=0; }
+
+      // Fish AI
+      if (!s.fishAI) s.fishAI=new FishAI(FishType.SMOOTH, BAR_H-30, BAR_H, FISH_H_PX, s.difficulty);
+      s.fishY = s.fishAI.update(TIMER_MS, s.difficulty);
+
+      // Progress
+      const inGreen = (s.fishY+FISH_H_PX>s.greenY) && (s.fishY<s.greenY+s.greenHeight);
+      s.greenProgressWidth += inGreen ? PROGRESS_FILL : s.decayRate;
+      s.greenProgressWidth = Math.max(0, Math.min(BAR_H, s.greenProgressWidth));
+
+      // Win / lose
+      if (s.greenProgressWidth >= BAR_H) {
+        if (this.gameLoopId!==null) { clearInterval(this.gameLoopId); this.gameLoopId=null; }
+        const pts = this.addPointsForCatch();
+        this.setLabel("result-lbl",`Fish Caught! +${pts}g`,"#64FF64");
+        setTimeout(()=>this.setLabel("result-lbl",""), 2500);
+        this.endFishingSession(); return;
+      } else if (s.greenProgressWidth <= 0 && s.tickCounter>10) {
+        if (this.gameLoopId!==null) { clearInterval(this.gameLoopId); this.gameLoopId=null; }
+        this.setLabel("result-lbl","Fish got away!","red");
+        setTimeout(()=>this.setLabel("result-lbl",""), 2500);
+        this.endFishingSession(); return;
+      }
+    }
+    this.renderGame();
+  }
+
+  // ── Scoring ───────────────────────────────────────────────
+  private addPointsForCatch(): number {
+    const s = this.state;
+    const si = s.currentStage-1;
+    const isHyper = s.fishType===FishType.HYPER;
+    const baseVal = STAGE_BASE_VALUES[si][isHyper?1:0];
+    const bonus = FISH_BONUS[s.fishType];
+    const pts = Math.round(baseVal * bonus * (0.5 + s.difficulty/100) * s.priceMultiplier);
+    s.stageScore += pts; s.totalScore += pts;
+    this.useBobber();
+    return pts;
+  }
+
+  private useBobber(): void {
+    const s = this.state;
+    for(let i=0;i<5;i++){
+      if(s.bobberInventory[i]>0){
+        s.bobberInventory[i]--;
+        const bt=s.bobberTypes[i];
+        if(s.bobberInventory[i]===0){
+          s.bobberTypes[i]=0;
+          if(bt===1) s.decayRate=PROGRESS_DECAY;
+          else if(bt===2) s.biteChance=0.5;
+          else if(bt===3) s.priceMultiplier=1;
+        }
+        this.updateInvButtons(); break;
+      }
+    }
+  }
+
+  private evaluateStageProgress(): void {
+    const s = this.state;
+    s.sessionActive=false; s.stageEnded=true;
+    const btn=document.getElementById("hook-btn") as HTMLButtonElement|null;
+    if(btn) btn.disabled=true;
+
+    if (s.stageScore >= STAGE_TARGET) {
+      if (s.currentStage===MAX_STAGES) {
+        alert(`Stage ${s.currentStage} Complete!\nYou earned ${s.stageScore}g!\nYou've completed all stages!`);
+        this.cancelTimers(); this.showScreen("victory");
+      } else {
+        const fee = CAPTAIN_FEES[s.currentStage-1];
+        if (s.stageScore >= fee) {
+          s.stageScore -= fee;
+          alert(`Stage ${s.currentStage} Complete!\nCaptain's Fee: ${fee}g deducted!\nRemaining: ${s.stageScore}g\nVisit the fishmonger!`);
+          this.cancelTimers(); this.showScreen("market");
+        } else {
+          alert(`Game Over!\nCouldn't pay the Captain's fee of ${fee}g!`);
+          this.cancelTimers(); this.doResetAndMenu();
+        }
+      }
+    } else {
+      alert(`Game Over!\nYou only earned ${s.stageScore}g\nTarget was ${STAGE_TARGET}g`);
+      this.cancelTimers(); this.doResetAndMenu();
+    }
+  }
+
+  private doResetAndMenu(): void {
+    const s = this.state;
+    s.rodLevel=0; s.greenHeight=100;
+    s.bobberInventory=[0,0,0,0,0]; s.bobberTypes=[0,0,0,0,0];
+    s.decayRate=PROGRESS_DECAY; s.biteChance=0.5; s.priceMultiplier=1; s.totalScore=0;
+    this.showScreen("menu");
+  }
+
+  // ── Stage Advancement ─────────────────────────────────────
+  private advanceToNextStage(): void {
+    const s = this.state;
+    const fee = CAPTAIN_FEES[s.currentStage-1];
+    if (s.stageScore < fee) alert(`Warning: Low funds.\nCaptain's upcoming fee: ${fee}g`);
+    else s.stageScore -= fee;
+    s.currentStage++;
+    s.stageEnded=false; s.waitingForHook=false;
+
+    if (s.currentStage>MAX_STAGES) {
+      alert(`CONGRATULATIONS!\nAll 5 stages complete!\nTotal: ${s.totalScore}g`);
+      this.resetToStage1(); this.showScreen("menu"); return;
+    }
+    s.stageScore=0; s.timeRemaining=90;
+    s.difficulty=Math.floor((STAGE_DIFFICULTY[s.currentStage-1][0]+STAGE_DIFFICULTY[s.currentStage-1][1])/2);
+    this.showScreen("game");
+    const msgs:{[k:number]:string}={
+      2:"Not bad for a Junior Fisherman.\nI need 1,000g before our next trip.",
+      3:"Feel the warmth?\nI need 1,500g before our next trip.",
+      4:"Don't ask why.\nI need 2,500g before our next trip.",
+      5:"Great job. Final stretch.\nI need 5,000g for a special surprise.",
+    };
+    setTimeout(()=>{
+      alert(`Captain: ${msgs[s.currentStage]||"I need 500g for the next trip."}`);
+      s.sessionActive=true;
+      this.resetMiniGame(); this.startCountdown();
+    }, 100);
+  }
+
+  // ── Purchases ─────────────────────────────────────────────
+  private purchaseRod(): void {
+    const prices=[250,500,1000,2500,5000,10000];
+    const s=this.state;
+    if(s.rodLevel>=prices.length){ alert("Rod already at max level!"); return; }
+    const cost=prices[s.rodLevel];
+    if(s.stageScore>=cost){
+      s.stageScore-=cost; s.rodLevel++; s.greenHeight+=10;
+      this.renderMarket();
+      alert(`Rod upgraded to Level ${s.rodLevel}!\nGreen zone +10px!`);
+    } else alert(`Need ${cost}g! You have: ${s.stageScore}g`);
+  }
+
+  private purchaseBobber(btype:number, cost:number, name:string): void {
+    const s=this.state;
+    const slot=s.bobberInventory.findIndex(v=>v===0);
+    if(slot===-1){ alert("Bobber inventory full! (5/5)"); return; }
+    if(s.stageScore>=cost){
+      s.stageScore-=cost;
+      s.bobberInventory[slot]=10; s.bobberTypes[slot]=btype;
+      if(btype===1) s.decayRate=-2;
+      else if(btype===2) s.biteChance=0.8;
+      else if(btype===3) s.priceMultiplier=2;
+      this.renderMarket();
+      alert(`${name} purchased!\nAdded to slot ${slot+1}.`);
+    } else alert(`Need ${cost}g! You have: ${s.stageScore}g`);
+  }
+
+  // ── Mod Menu ──────────────────────────────────────────────
+  private toggleMod(): void {
+    if(this.state.screen!=="game") return;
+    this.state.modVisible=!this.state.modVisible;
+    const existing=document.getElementById("mod-panel");
+    if(existing){ existing.remove(); return; }
+    const panel=document.createElement("div");
+    panel.id="mod-panel";
+    Object.assign(panel.style,{position:"absolute",left:"770px",top:"120px",
+      width:"100px",background:"rgba(0,0,0,0.85)",color:"white",
+      padding:"6px",fontFamily:"Courier New",fontSize:"11px",borderRadius:"4px"});
+    const skipBtn=document.createElement("button");
+    skipBtn.textContent="SKIP LEVEL";
+    Object.assign(skipBtn.style,{width:"100%",marginBottom:"6px",cursor:"pointer"});
+    skipBtn.onclick=()=>{ this.state.stageScore=5000; alert("Skip! Granted 5000g."); this.evaluateStageProgress(); };
+    const diffLabel=document.createElement("div"); diffLabel.textContent="Difficulty:";
+    const diffInput=document.createElement("input");
+    diffInput.type="number"; diffInput.value=String(this.state.difficulty);
+    diffInput.min="1"; diffInput.max="100";
+    Object.assign(diffInput.style,{width:"90px",marginBottom:"6px"});
+    diffInput.oninput=()=>{ this.state.difficulty=Math.max(1,Math.min(100,parseInt(diffInput.value)||10)); };
+    const typeLabel=document.createElement("div"); typeLabel.textContent="Fish Type:";
+    const typeSelect=document.createElement("select");
+    ["SMOOTH","ACTIVE","HYPER","GLIDER"].forEach((t,i)=>{
+      const o=document.createElement("option"); o.value=String(i); o.textContent=t;
+      if(i===this.state.fishType) o.selected=true;
+      typeSelect.appendChild(o);
+    });
+    Object.assign(typeSelect.style,{width:"100%",marginBottom:"6px"});
+    typeSelect.onchange=()=>{ this.state.fishType=parseInt(typeSelect.value) as FishType; };
+    const newFishBtn=document.createElement("button");
+    newFishBtn.textContent="New Fish";
+    Object.assign(newFishBtn.style,{width:"100%",cursor:"pointer"});
+    newFishBtn.onclick=()=>this.resetMiniGame();
+    panel.append(skipBtn,diffLabel,diffInput,typeLabel,typeSelect,newFishBtn);
+    this.ui.appendChild(panel);
+  }
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────
+window.addEventListener("DOMContentLoaded", () => {
+  const canvas = document.getElementById("game-canvas") as HTMLCanvasElement;
+  const uiLayer = document.getElementById("ui-layer") as HTMLDivElement;
+  new Game(canvas, uiLayer);
+});
