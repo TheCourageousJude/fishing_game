@@ -1,4 +1,5 @@
-** Running the TypeScript code contains 147 other files to completely run the program. Extremely hectic experience.
+** Running the TypeScript code contains 147 other files to completely run the program.
+  It was too tough to upload "dependencies" to let the TS source code run.
 
 Illustration of file directories:
 fishgamecode_TypeScript [THE MAIN THING]
